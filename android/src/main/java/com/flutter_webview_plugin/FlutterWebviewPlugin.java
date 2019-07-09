@@ -5,23 +5,21 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Point;
+import android.os.Build;
 import android.view.Display;
-import android.widget.FrameLayout;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
-import android.os.Build;
-
-import java.util.Map;
-
+import android.widget.FrameLayout;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.PluginRegistry;
+import java.util.Map;
 
 /**
  * FlutterWebviewPlugin
  */
-public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.ActivityResultListener {
+public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.ActivityResultListener,PluginRegistry.RequestPermissionsResultListener {
     private Activity activity;
     private WebviewManager webViewManager;
     private Context context;
@@ -32,6 +30,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         channel = new MethodChannel(registrar.messenger(), CHANNEL_NAME);
         final FlutterWebviewPlugin instance = new FlutterWebviewPlugin(registrar.activity(),registrar.activeContext());
         registrar.addActivityResultListener(instance);
+        registrar.addRequestPermissionsResultListener(instance);
         channel.setMethodCallHandler(instance);
     }
 
@@ -254,6 +253,14 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
     public boolean onActivityResult(int i, int i1, Intent intent) {
         if (webViewManager != null && webViewManager.resultHandler != null) {
             return webViewManager.resultHandler.handleResult(i, i1, intent);
+        }
+        return false;
+    }
+
+    @Override
+    public boolean onRequestPermissionsResult(int i, String[] strings, int[] ints) {
+        if (webViewManager != null && webViewManager.resultHandler != null) {
+            return webViewManager.resultHandler.handleRequestPermissionsResult(i, strings, ints);
         }
         return false;
     }
