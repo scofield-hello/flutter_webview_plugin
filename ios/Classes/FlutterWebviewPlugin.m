@@ -1,13 +1,15 @@
 #import "FlutterWebviewPlugin.h"
+#import <BMKLocationkit/BMKLocationComponent.h>
 
 static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
 
 // UIWebViewDelegate
-@interface FlutterWebviewPlugin() <WKNavigationDelegate, UIScrollViewDelegate, WKUIDelegate> {
+@interface FlutterWebviewPlugin() <WKNavigationDelegate, UIScrollViewDelegate, WKUIDelegate, WKScriptMessageHandler, BMKLocationAuthDelegate, BMKLocationManagerDelegate> {
     BOOL _enableAppScheme;
     BOOL _enableZoom;
     NSString* _invalidUrlRegex;
 }
+@property (nonatomic, strong)BMKLocationManager *locationManager;
 @end
 
 @implementation FlutterWebviewPlugin
@@ -17,7 +19,9 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
                binaryMessenger:[registrar messenger]];
 
     UIViewController *viewController = [UIApplication sharedApplication].delegate.window.rootViewController;
+    [[BMKLocationAuth sharedInstance] checkPermisionWithKey:@"N5G1xWbFbaKEXK2PxYmGgsWf0dnYEc5V" authDelegate:self];
     FlutterWebviewPlugin* instance = [[FlutterWebviewPlugin alloc] initWithViewController:viewController];
+    
 
     [registrar addMethodCallDelegate:instance channel:channel];
 }
@@ -106,8 +110,17 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     } else {
         rc = self.viewController.view.bounds;
     }
-
-    self.webview = [[WKWebView alloc] initWithFrame:rc];
+    //配置控制器
+    WKWebViewConfiguration *configuration = [[WKWebViewConfiguration alloc] init];
+    configuration.userContentController = [WKUserContentController new];
+    
+    //配置js调用统一参数
+    [configuration.userContentController addScriptMessageHandler:self name:@"BocBridge"];
+    
+    WKPreferences *preferences = [WKPreferences new];
+    preferences.javaScriptCanOpenWindowsAutomatically = YES;
+    configuration.preferences = preferences;
+    self.webview = [[WKWebView alloc] initWithFrame:rc configuration:configuration];
     self.webview.UIDelegate = self;
     self.webview.navigationDelegate = self;
     self.webview.scrollView.delegate = self;
@@ -117,12 +130,12 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     
     [self.webview addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:NULL];
 
-    WKPreferences* preferences = [[self.webview configuration] preferences];
-    if ([withJavascript boolValue]) {
-        [preferences setJavaScriptEnabled:YES];
-    } else {
-        [preferences setJavaScriptEnabled:NO];
-    }
+//    WKPreferences* preferences = [[self.webview configuration] preferences];
+//    if ([withJavascript boolValue]) {
+//        [preferences setJavaScriptEnabled:YES];
+//    } else {
+//        [preferences setJavaScriptEnabled:NO];
+//    }
 
     _enableZoom = [withZoom boolValue];
 
@@ -275,6 +288,74 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
   }
 }
 
+-(void)initLoc
+{
+    if ([CLLocationManager locationServicesEnabled] && ([CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorizedWhenInUse || [CLLocationManager authorizationStatus] == kCLAuthorizationStatusNotDetermined || [CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorized)) {
+        //定位功能可用
+        _locationManager = [[BMKLocationManager alloc] init];
+        _locationManager.delegate = self;
+        _locationManager.coordinateType = BMKLocationCoordinateTypeBMK09LL;
+        _locationManager.distanceFilter = kCLLocationAccuracyBestForNavigation;
+        _locationManager.desiredAccuracy = kCLLocationAccuracyBest;
+        _locationManager.activityType = CLActivityTypeAutomotiveNavigation;
+        _locationManager.pausesLocationUpdatesAutomatically = NO;
+        _locationManager.allowsBackgroundLocationUpdates = NO;// YES的话是可以进行后台定位的，但需要项目配置，否则会报错，具体参考开发文档
+        _locationManager.locationTimeout = 10;
+        _locationManager.reGeocodeTimeout = 10;
+        //开始定位
+        [_locationManager startUpdatingLocation];
+    }else if ([CLLocationManager authorizationStatus] ==kCLAuthorizationStatusDenied) {
+        //定位不能用
+        [self ocForJsData:@"03" lat:@"" lon:@"" adCode:@""];
+        
+    }
+
+}
+#pragma mark - BMKLocationManagerDelegate
+/**
+ *  @brief 连续定位回调函数。
+ *  @param manager 定位 BMKLocationManager 类。
+ *  @param location 定位结果，参考BMKLocation。
+ *  @param error 错误信息。
+ */
+- (void)BMKLocationManager:(BMKLocationManager * _Nonnull)manager didUpdateLocation:(BMKLocation * _Nullable)location orError:(NSError * _Nullable)error{
+    if (error) {
+        [self ocForJsData:@"02" lat:@"" lon:@"" adCode:@""];
+    }
+    if (location) {
+        NSString *lat;
+        NSString *lon;
+        NSString *adCode;
+        if (location.rgcData) {
+            lat = [NSString stringWithFormat:@"%.6lf", location.location.coordinate.latitude];
+            lon = [NSString stringWithFormat:@"%.6lf", location.location.coordinate.longitude];
+            adCode = [NSString stringWithFormat:@"%@", location.rgcData.adCode];
+            [self ocForJsData:@"01" lat:lat lon:lon adCode:adCode];
+            
+        }
+    }
+}
+#pragma mark - WKScriptMessageHandler
+//收从js传给oc的数据
+- (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
+    if ([message.name isEqualToString:@"BocBridge"]) {
+        [self initLoc];
+    }
+}
+-(void)ocForJsData:(NSString *)status lat:(NSString *)lat lon:(NSString *)lon adCode:(NSString *)adCode
+{
+    NSDictionary *param = @{@"data":@{@"status":status, @"lat":lat, @"lon":lon, @"adcode":adCode}};
+    NSData *data = [NSJSONSerialization dataWithJSONObject:param options:kNilOptions error:nil];
+    NSString *string = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    NSLog(@"string2:%@",string);
+    //setLoc()是JS的语言
+    NSString * jsStr = [NSString stringWithFormat:@"setLoc(%@)",string];
+    __weak FlutterWebviewPlugin *WeakSelf = self;
+    [self.webview evaluateJavaScript:jsStr completionHandler:^(id _Nullable result, NSError * _Nullable error) {
+        NSLog(@"result=%@  error=%@",result, error);
+        [WeakSelf.locationManager stopUpdatingLocation];
+    }];
+}
 #pragma mark -- WkWebView Delegate
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
     decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
@@ -336,6 +417,11 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
         [channel invokeMethod:@"onHttpError" arguments:@{@"code": [NSString stringWithFormat:@"%ld", response.statusCode], @"url": webView.URL.absoluteString}];
     }
     decisionHandler(WKNavigationResponsePolicyAllow);
+}
+- (void)webView:(WKWebView *)webView didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential * _Nullable credential))completionHandler{  if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {  NSURLCredential *card = [[NSURLCredential alloc]initWithTrust:challenge.protectionSpace.serverTrust];
+    completionHandler(NSURLSessionAuthChallengeUseCredential,card);
+}
+    
 }
 
 #pragma mark -- UIScrollViewDelegate
