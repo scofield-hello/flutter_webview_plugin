@@ -41,10 +41,19 @@ android {
         // additional scary permissions such as WRITE_EXTERNAL_STORAGE and READ_PHONE_STATE.
         minSdkVersion 16
     }
+
+    sourceSets {
+        main{
+            jniLibs.srcDir 'libs'
+            jni.srcDirs = []    //disable automatic ndk-build
+        }
+    }
+
     lintOptions {
         disable 'InvalidPackage'
     }
 }
 dependencies {
+    implementation fileTree(dir:  'libs' , include: ['*.jar'])
     implementation group: 'androidx.appcompat', name: 'appcompat', version: '1.0.0'
 }
