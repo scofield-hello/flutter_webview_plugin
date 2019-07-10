@@ -229,7 +229,15 @@ Future<Null> reload();
 ```
 
 ```dart
+Future<bool> canGoBack();
+```
+
+```dart
 Future<Null> goBack();
+```
+
+```dart
+Future<bool> canGoForward();
 ```
 
 ```dart
