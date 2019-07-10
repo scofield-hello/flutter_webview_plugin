@@ -1,6 +1,7 @@
 #import "FlutterWebviewPlugin.h"
 #import <BMKLocationkit/BMKLocationComponent.h>
-
+#import <AVFoundation/AVCaptureDevice.h>
+#import <AVFoundation/AVMediaFormat.h>
 static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
 
 // UIWebViewDelegate
@@ -74,7 +75,13 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     } else if ([@"reload" isEqualToString:call.method]) {
         [self reload];
         result(nil);
-    } else {
+    } else if ([@"canGoBack" isEqualToString:call.method]) {
+//        [self reload];
+        result([NSString stringWithFormat:@"%d", [self canGoBack]]);
+    }else if ([@"canGoForward" isEqualToString:call.method]) {
+//        [self reload];
+        result([NSString stringWithFormat:@"%d", [self canGoForward]]);
+    }else {
         result(FlutterMethodNotImplemented);
     }
 }
@@ -265,6 +272,24 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
         [self.webview reload];
     }
 }
+-(BOOL)canGoBack
+{
+    if (self.webview !=nil) {
+     BOOL canGoBack = [self.webview canGoBack];
+        return canGoBack;
+    }else{
+        return NO;
+    }
+}
+-(BOOL)canGoForward
+{
+    if (self.webview != nil) {
+      BOOL canGoForward = [self.webview canGoForward];
+        return canGoForward;
+    }else{
+        return NO;
+    }
+}
 
 - (void)cleanCookies {
     [[NSURLSession sharedSession] resetWithCompletionHandler:^{
@@ -288,7 +313,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
   }
 }
 
--(void)initLoc
+-(void)initLocAndPhoto
 {
     if ([CLLocationManager locationServicesEnabled] && ([CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorizedWhenInUse || [CLLocationManager authorizationStatus] == kCLAuthorizationStatusNotDetermined || [CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorized)) {
         //定位功能可用
@@ -307,7 +332,14 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     }else if ([CLLocationManager authorizationStatus] ==kCLAuthorizationStatusDenied) {
         //定位不能用
         [self ocForJsData:@"03" lat:@"" lon:@"" adCode:@""];
-        
+
+    }
+    
+    AVAuthorizationStatus authStatus =  [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
+    if (authStatus == AVAuthorizationStatusRestricted || authStatus ==AVAuthorizationStatusDenied)
+    {
+        //无权限
+        NSLog(@"----------");
     }
 
 }
@@ -331,7 +363,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
             lon = [NSString stringWithFormat:@"%.6lf", location.location.coordinate.longitude];
             adCode = [NSString stringWithFormat:@"%@", location.rgcData.adCode];
             [self ocForJsData:@"01" lat:lat lon:lon adCode:adCode];
-            
+
         }
     }
 }
@@ -339,7 +371,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
 //收从js传给oc的数据
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
     if ([message.name isEqualToString:@"BocBridge"]) {
-        [self initLoc];
+        [self initLocAndPhoto];
     }
 }
 -(void)ocForJsData:(NSString *)status lat:(NSString *)lat lon:(NSString *)lon adCode:(NSString *)adCode
