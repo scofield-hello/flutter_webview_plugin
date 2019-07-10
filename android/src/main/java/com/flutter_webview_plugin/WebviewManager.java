@@ -28,6 +28,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.FileProvider;
 import com.baidu.location.BDAbstractLocationListener;
@@ -121,6 +122,8 @@ class WebviewManager {
             locationClient.start();
           }
         } else {
+          Toast.makeText(context, "您已拒绝应用使用定位的权限.",
+              Toast.LENGTH_LONG).show();
           Log.w(TAG, "用户拒绝授予定位权限.");
           try{
             JSONObject params = new JSONObject();
@@ -139,6 +142,10 @@ class WebviewManager {
           }
         }
         Log.i(TAG, "授予相机权限：" + granted);
+        if (granted != PackageManager.PERMISSION_GRANTED){
+          Toast.makeText(context, "您必须授予应用访问相机与文件的权限才能使用该功能.",
+              Toast.LENGTH_LONG).show();
+        }
       }
       return true;
     }
@@ -224,7 +231,10 @@ class WebviewManager {
           // Eclipse will swear at you if you try to put @Override here
           // For Android 3.0+
           public void openFileChooser(ValueCallback<Uri> uploadMsg) {
-
+            if (!checkCameraPermissions()){
+              requestCameraPermissions();
+              return;
+            }
             mUploadMessage = uploadMsg;
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -235,6 +245,10 @@ class WebviewManager {
 
           // For Android 3.0+
           public void openFileChooser(ValueCallback uploadMsg, String acceptType) {
+            if (!checkCameraPermissions()){
+              requestCameraPermissions();
+              return;
+            }
             mUploadMessage = uploadMsg;
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -246,6 +260,10 @@ class WebviewManager {
           // For Android 4.1
           public void openFileChooser(
               ValueCallback<Uri> uploadMsg, String acceptType, String capture) {
+            if (!checkCameraPermissions()){
+              requestCameraPermissions();
+              return;
+            }
             mUploadMessage = uploadMsg;
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -260,6 +278,10 @@ class WebviewManager {
               WebView webView,
               ValueCallback<Uri[]> filePathCallback,
               FileChooserParams fileChooserParams) {
+            if (!checkCameraPermissions()){
+              requestCameraPermissions();
+              return true;
+            }
             if (mUploadMessageArray != null) {
               mUploadMessageArray.onReceiveValue(null);
             }
@@ -336,7 +358,9 @@ class WebviewManager {
           }
         },
         "BocBridge");
-    checkCameraPermissions();
+    if(!checkCameraPermissions()){
+      requestCameraPermissions();
+    }
   }
 
   private Uri getOutputFilename(String intentType) {
@@ -539,6 +563,7 @@ class WebviewManager {
       webView.reload();
     }
   }
+
   /** Navigates back on the Webview. */
   void back(MethodCall call, MethodChannel.Result result) {
     if (webView != null && webView.canGoBack()) {
@@ -557,11 +582,11 @@ class WebviewManager {
   }
   /** Checks if going back on the Webview is possible. */
   boolean canGoBack() {
-    return webView.canGoBack();
+    return webView != null && webView.canGoBack();
   }
   /** Checks if going forward on the Webview is possible. */
   boolean canGoForward() {
-    return webView.canGoForward();
+    return webView != null && webView.canGoForward();
   }
 
   void hide(MethodCall call, MethodChannel.Result result) {
@@ -582,17 +607,19 @@ class WebviewManager {
     }
   }
 
-  void checkCameraPermissions(){
+  boolean checkCameraPermissions(){
     int checkResult =
         ActivityCompat.checkSelfPermission(activity, permission.WRITE_EXTERNAL_STORAGE)
             | ActivityCompat.checkSelfPermission(activity, permission.CAMERA);
     Log.i(TAG, "checkCameraPermissions: 权限验证结果:" + checkResult);
-    if (checkResult != PackageManager.PERMISSION_GRANTED) {
-      ActivityCompat.requestPermissions(activity, new String[]{
-          permission.WRITE_EXTERNAL_STORAGE,
-          permission.CAMERA
-      }, CAMERA_REQUEST_CODE);
-    }
+    return checkResult == PackageManager.PERMISSION_GRANTED;
+  }
+
+  void requestCameraPermissions(){
+    ActivityCompat.requestPermissions(activity, new String[]{
+        permission.WRITE_EXTERNAL_STORAGE,
+        permission.CAMERA
+    }, CAMERA_REQUEST_CODE);
   }
 
   LocationClient initLocationClient() {
