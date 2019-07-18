@@ -280,7 +280,7 @@ class WebviewManager {
               FileChooserParams fileChooserParams) {
             if (!checkCameraPermissions()){
               requestCameraPermissions();
-              return true;
+              return false;
             }
             if (mUploadMessageArray != null) {
               mUploadMessageArray.onReceiveValue(null);
@@ -339,7 +339,6 @@ class WebviewManager {
             Log.d(TAG, "getLocNotice: 执行Native方法.");
             int checkResult =
                 ActivityCompat.checkSelfPermission(activity, permission.READ_PHONE_STATE)
-                    | ActivityCompat.checkSelfPermission(activity, permission.WRITE_EXTERNAL_STORAGE)
                     | ActivityCompat.checkSelfPermission(activity, permission.ACCESS_FINE_LOCATION);
             Log.i(TAG, "getLocNotice: 权限验证结果:" + checkResult);
             if (checkResult == PackageManager.PERMISSION_GRANTED) {
@@ -351,7 +350,6 @@ class WebviewManager {
             } else {
               ActivityCompat.requestPermissions(activity, new String[]{
                   permission.READ_PHONE_STATE,
-                  permission.WRITE_EXTERNAL_STORAGE,
                   permission.ACCESS_FINE_LOCATION
               }, LOCATION_REQUEST_CODE);
             }
